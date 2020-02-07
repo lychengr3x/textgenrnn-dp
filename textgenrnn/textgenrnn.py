@@ -257,8 +257,9 @@ class textgenrnn:
         model_t.fit(gen, steps_per_epoch=steps_per_epoch,
                               epochs=num_epochs,
                               callbacks=[
-                                  LearningRateScheduler(
-                                      lr_linear_decay),
+                                # only accept type of tf.keras.optimizers
+                                #   LearningRateScheduler(
+                                #       lr_linear_decay),
                                   generate_after_epoch(
                                       self, gen_epochs,
                                       max_gen_length),
@@ -270,6 +271,29 @@ class textgenrnn:
                               validation_data=gen_val,
                               validation_steps=val_steps
                               )
+
+        def compute_epsilon(steps):
+            """
+            Computes epsilon value for given hyperparameters.
+            """
+            assert self.config["dp"] == True
+            assert isinstance(self.config["noise_multiplier"], (int, float))
+            if self.config["noise_multiplier"] == 0.0:
+                return float('inf')
+            orders = [1 + x / 10. for x in range(1, 100)] + list(range(12, 64))
+            num = 42068
+            sampling_probability = self.config["batch_size"] / num
+            rdp = compute_rdp(q=sampling_probability,
+                                noise_multiplier=self.config["noise_multiplier"],
+                                steps=steps,
+                                orders=orders)
+            # Delta is set to 1e-5 because ptb data has 42068 training sentences.
+            return get_privacy_spent(orders, rdp, target_delta=1e-5)[0]    
+
+        # Compute the privacy budget expended.
+        if self.config["dp"]:
+            eps = compute_epsilon(self.config["num_epochs"] * 60000 // self.config["batch_size"])
+            print('For delta=1e-5, the current epsilon is: %.2f' % eps)
 
         # Keep the text-only version of the model if using context labels
         if context_labels is not None:

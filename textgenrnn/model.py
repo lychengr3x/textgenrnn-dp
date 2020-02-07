@@ -4,6 +4,12 @@ from tensorflow.keras.layers import concatenate, Reshape, SpatialDropout1D
 from tensorflow.keras.models import Model
 from tensorflow.keras import backend as K
 from tensorflow import config as config
+from tensorflow.compat.v1 import losses
+from tensorflow.keras.losses import CategoricalCrossentropy
+from tensorflow_privacy.privacy.analysis.rdp_accountant import compute_rdp
+from tensorflow_privacy.privacy.analysis.rdp_accountant import get_privacy_spent
+from tensorflow_privacy.privacy.optimizers.dp_optimizer import DPAdamOptimizer
+from tensorflow_privacy.privacy.dp_query.gaussian_query import GaussianAverageQuery
 from .AttentionWeightedAverage import AttentionWeightedAverage
 
 
@@ -15,7 +21,7 @@ def textgenrnn_model(num_classes, cfg, context_size=None,
     Builds the model architecture for textgenrnn and
     loads the specified weights for the model.
     '''
-
+    
     input = Input(shape=(cfg['max_length'],), name='input')
     embedded = Embedding(num_classes, cfg['dim_embeddings'],
                          input_length=cfg['max_length'],
@@ -37,7 +43,26 @@ def textgenrnn_model(num_classes, cfg, context_size=None,
         model = Model(inputs=[input], outputs=[output])
         if weights_path is not None:
             model.load_weights(weights_path, by_name=True)
-        model.compile(loss='categorical_crossentropy', optimizer=optimizer)
+
+        # differential privacy 
+        if "dp" in cfg:
+            print("Implement Differential Privacy")
+            # Compute vector of per-example loss rather than its mean over a minibatch.
+            loss = CategoricalCrossentropy(from_logits=True, reduction=losses.Reduction.NONE)
+            lr = 4e-3 if "lr" not in cfg else cfg["lr"]
+            l2_norm_clip = 1.0 if "l2_norm_clip" not in cfg else cfg["l2_norm_clip"]
+            noise_multiplier = 1.1 if "noise_multiplier" not in cfg else cfg["noise_multiplier"]
+            num_microbatches = 32 if "num_microbatches" not in cfg else cfg["num_microbatches"]
+            dp_average_query = GaussianAverageQuery(l2_norm_clip, 
+                                                    l2_norm_clip * noise_multiplier, 
+                                                    num_microbatches)
+            optimizer = DPAdamOptimizer(dp_sum_query=dp_average_query, 
+                                        num_microbatches=num_microbatches, 
+                                        learning_rate=lr)
+        else:
+            loss='categorical_crossentropy'
+
+        model.compile(loss=loss, optimizer=optimizer)
 
     else:
         context_input = Input(
