@@ -4,6 +4,7 @@ from tensorflow.keras.layers import concatenate, Reshape, SpatialDropout1D
 from tensorflow.keras.models import Model
 from tensorflow.keras import backend as K
 from tensorflow import config as config
+from .gradient_noise import add_gradient_noise
 from .AttentionWeightedAverage import AttentionWeightedAverage
 
 
@@ -37,6 +38,12 @@ def textgenrnn_model(num_classes, cfg, context_size=None,
         model = Model(inputs=[input], outputs=[output])
         if weights_path is not None:
             model.load_weights(weights_path, by_name=True)
+        
+        if "dp" in cfg:
+            print("Implement differential privacy")
+            NoisyAdam = add_gradient_noise(Adam)
+            optimizer = NoisyAdam(lr=4e-3)
+
         model.compile(loss='categorical_crossentropy', optimizer=optimizer)
 
     else:
