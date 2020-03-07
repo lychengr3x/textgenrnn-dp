@@ -1,6 +1,7 @@
 import inspect
 from tensorflow import keras
 from tensorflow.keras import backend as K
+from tensorflow.python.ops import clip_ops
 
 
 def _get_shape(x):
@@ -33,9 +34,20 @@ def add_gradient_noise(BaseOptimizer):
                 self.noise_eta = K.variable(noise_eta, name='noise_eta')
                 self.noise_gamma = K.variable(noise_gamma, name='noise_gamma')
 
+            if "clipnorm" in kwargs:
+                self.clipnorm = K.variable(kwargs.pop("clipnorm"), name="clipnorm")
+            if "clipvalue" in kwargs:
+                self.clipvalue = K.variable(kwargs.pop("clipvalue"), name="clipvalue")
+
         def get_gradients(self, loss, params):
             grads = super(NoisyOptimizer, self).get_gradients(loss, params)
-
+            if hasattr(self, "clipnorm"):
+                grads = [clip_ops.clip_by_norm(g, self.clipnorm) for g in grads]
+            if hasattr(self, "clipvalue"):
+                grads = [
+                    clip_ops.clip_by_value(g, -self.clipvalue, self.clipvalue)
+                    for g in grads
+                ]
             # Add decayed gaussian noise
             t = K.cast(self.iterations, K.dtype(grads[0]))
             variance = self.noise_eta / ((1 + t) ** self.noise_gamma)

@@ -36,15 +36,19 @@ def textgenrnn_model(num_classes, cfg, context_size=None,
 
     if context_size is None:
         model = Model(inputs=[input], outputs=[output])
+        loss='categorical_crossentropy'
         if weights_path is not None:
             model.load_weights(weights_path, by_name=True)
         
-        if "dp" in cfg:
+        if "dp" in cfg and cfg["dp"]:
             print("Implement differential privacy")
             NoisyAdam = add_gradient_noise(Adam)
-            optimizer = NoisyAdam(lr=4e-3)
+            optimizer = NoisyAdam(noise_eta=cfg['noise_eta'], 
+                                  noise_gamma=cfg['noise_gamma'], 
+                                  lr=4e-3, 
+                                  clipnorm=cfg["clipnorm"])
 
-        model.compile(loss='categorical_crossentropy', optimizer=optimizer)
+        model.compile(loss=loss, optimizer=optimizer)
 
     else:
         context_input = Input(
